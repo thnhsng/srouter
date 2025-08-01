@@ -5,6 +5,13 @@ import PackageDescription
 
 let package = Package(
     name: "srouter",
+    platforms: [
+        .macOS(.v13),
+        .iOS(.v16),
+        .tvOS(.v13),
+        .watchOS(.v6),
+        .macCatalyst(.v13)
+    ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
@@ -19,7 +26,7 @@ let package = Package(
             name: "srouter"
         ),
         .testTarget(
-            name: "srouterTests",
+            name: "SRouterTests",
             dependencies: ["srouter"]
         ),
     ]
