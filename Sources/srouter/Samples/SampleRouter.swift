@@ -8,7 +8,6 @@
 import SwiftUI
 
 // MARK: - 1. Routes ----------------------------------------------------------
-
 enum DemoRoute: Routable {
 
     case home
@@ -26,7 +25,7 @@ enum DemoRoute: Routable {
     }
 
     // Build destination view and inject the router.
-    @ViewBuilder
+    @MainActor @ViewBuilder
     func view(attach router: any RouterHandling) -> some View {
         switch self {
         case .home:
@@ -59,8 +58,7 @@ enum DemoPortal: PortalRoutable {
     case settings
 }
 
-@MainActor
-final class DemoPortalMapper: PortalRouteMappable, Sendable {
+final class DemoPortalMapper: PortalRouteMappable {
     typealias AppRoute = DemoRoute
 
     func mapRoute(from portalRoute: some PortalRoutable) -> DemoRoute? {

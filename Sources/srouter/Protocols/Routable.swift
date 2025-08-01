@@ -38,8 +38,7 @@ public protocol Routable: Identifiable, Hashable, Sendable {
 
     /// Creates the screen, injecting the supplied **router** for
     /// further navigation inside the view hierarchy.
-    @MainActor
-    @ViewBuilder
+    @MainActor @ViewBuilder
     func view(attach router: any RouterHandling) -> Destination
 }
 
