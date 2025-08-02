@@ -7,7 +7,7 @@
 //
 
 /// Publishes the lifecycle of a routed screen.
-public enum RouteState<Route>: Sendable where Route: Routable & Hashable & Sendable {
+public enum RouteState<Route>: Sendable where Route: Routable {
     /// The screen is now visible (push / present).
     case active(Route)
     /// The screen has disappeared (pop / dismiss).
