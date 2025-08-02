@@ -25,17 +25,17 @@ private enum FakeRoute: Routable {
 
 private enum FakePortal: PortalRoutable { case settings }
 
-@MainActor
-private final class FakeMapper: PortalRouteMappable, Sendable {
+private final class FakeMapper: PortalRouteMappable {
     typealias AppRoute = FakeRoute
 
     private var hit = false
 
-    func mapRoute(from portalRoute: some PortalRoutable) -> FakeRoute? { .sheet(routeID: 42) }
-
-    func portalRoute(for portalRoute: some PortalRoutable) {
+    nonisolated func mapRoute(from portalRoute: any PortalRoutable) -> FakeRoute? { .sheet(routeID: 42) }
+    
+    func willMapPortalRoute(_ portalRoute: any PortalRoutable) {
         hit = true
     }
+
     var sideEffectTriggered: Bool { hit }
 }
 

@@ -8,10 +8,8 @@
 
 import SwiftUI
 
-/// A type-erased interface every router must adopt.
-///
-/// The protocol is isolated to the **main actor** to guarantee UI safety.
-@MainActor
+/// Defines the interface for a router.
+/// All methods run on the main actor.
 public protocol RouterHandling: ObservableObject {
 
     // MARK: - Associated Types
@@ -30,18 +28,35 @@ public protocol RouterHandling: ObservableObject {
     /// Router that presented **self** (nil for root).
     var presentingRouter: Self? { get set }
 
+    /// Stream of route events: `.active` or `.dismissed`.
+    var stateStream: AsyncStream<RouteState<Route>> { get }
+
     // MARK: - View Factory
+
     /// Builds the view for *route* with a router injected.
+    ///
+    /// - Parameter route: The route to display.
+    /// - Returns: A view for that route.
     func view(for route: Route) -> Destination
 
     // MARK: - Navigation API
-    /// Opens *route* immediately (fire-and-forget).
+
+    /// Pushes or presents a route immediately. (fire-and-forget).
+    ///
+    /// - Parameters:
+    ///   - route: The route to open.
+    ///   - dismissCompletion: Called after the route is dismissed.
     func route(
         to route: Route,
         dismissCompletion: (@Sendable () -> Void)?
     )
 
-    /// Opens *route* and suspends until it disappears.
+    /// Pushes or presents a route and waits until it dismisses.
+    ///
+    /// - Parameters:
+    ///   - route: The route to open.
+    ///   - dismissCompletion: Called after the route is dismissed.
+    /// - Returns: The final route state.
     @discardableResult
     func route(
         to route: Route,
@@ -51,26 +66,38 @@ public protocol RouterHandling: ObservableObject {
     /// Dismisses the current modal presentation.
     func dismiss()
 
-    /// Dismisses all modal presentations in the chain.
+    /// Dismisses all modal presentations back to root.
     func dismissToRoot()
 
-    /// Pops the top item from the navigation stack.
+    /// Pops the top view from the navigation stack.
     func pop()
 
-    /// Pops every item, returning to the root of the stack.
+    /// Pops all views back to the root of the stack.
     func popToRoot()
 
-    /// Number of nested routers including **self**.
+    /// The number of nested routers, including this one.
+    ///
+    /// - Returns: The stack count.
     func stacksCount() -> Int
 
     // MARK: - Portal API
-    /// Opens a cross-module portal (fire-and-forget).
+
+    /// Opens a cross-module portal immediately (fire-and-forget).
+    ///
+    /// - Parameters:
+    ///   - portalRoute: The portal route to open.
+    ///   - dismissCompletion: Called after the portal route is dismissed.
     func portal(
         for portalRoute: some PortalRoutable,
         dismissCompletion: (@Sendable () -> Void)?
     )
 
-    /// Opens a portal and suspends until the resulting screen disappears.
+    /// Opens a cross-module portal and waits until it dismisses.
+    ///
+    /// - Parameters:
+    ///   - portalRoute: The portal route to open.
+    ///   - dismissCompletion: Called after the portal route is dismissed.
+    /// - Returns: The final route state, or nil if cancelled.
     @discardableResult
     func portal(
         for portalRoute: some PortalRoutable,

@@ -6,31 +6,47 @@
 //  Copyright © 2024 Nguyen Thanh Sang. All rights reserved.
 //
 
-import Combine
 import SwiftUI
 
 @MainActor
-public final class Router<Route: Routable>: RouterHandling {
-    typealias DismissHandler = (@MainActor @Sendable () -> Void)
+public final class Router<Route: Routable>: @MainActor RouterHandling, ObservableObject {
 
-    // MARK: - Public – Published State
+    typealias DismissHandler = @MainActor @Sendable () -> Void
 
+    // MARK: - State 
+
+    /// Path for push navigation.
     @Published public var navigationPath: NavigationPath = .init()
+    /// The route shown modally, if any.
     @Published public var presentedView: Route?
+    /// The router that presented this one, or `nil` if this is root.
     public weak var presentingRouter: Router?
 
     // MARK: - Public – Publishers
-    /// Emits a ``RouteState`` for every screen managed by this router.
-    public var statePublisher: AnyPublisher<RouteState<Route>, Never> {
-        stateSubject.eraseToAnyPublisher()
+
+    /// A stream of route events (`.active` / `.dismissed`).
+    public var stateStream: AsyncStream<RouteState<Route>> {
+        AsyncStream { [weak self] continuation in
+            let id = UUID()
+            self?.continuations[id] = continuation
+
+            continuation.onTermination = { [weak self] _ in
+                /// `onTermination` must be actor‐unbound, so hop back to MainActor:
+                Task { @MainActor in
+                    self?.continuations.removeValue(forKey: id)
+                }
+            }
+        }
     }
 
     // MARK: - Private – Stored Properties
-    private let stateSubject = PassthroughSubject<RouteState<Route>, Never>()
+
+    /// Mapper for cross-module portal routes.
     internal var portalMapper: (any PortalRouteMappable)?
-    /// Maps textual keys → dismiss handlers.
-    /// Handlers run **on MainActor** when invoked.
+    /// Handlers to run when a route is dismissed.
     private var dismissHandlers: [String: DismissHandler] = [:]
+    /// Active continuations for broadcasting route events.
+    private var continuations: [UUID: AsyncStream<RouteState<Route>>.Continuation] = [:]
 
     // MARK: - Public – Initialisation
     /// Creates a standalone router or a child of an existing one.
@@ -55,11 +71,12 @@ extension Router {
         to route: Route,
         dismissCompletion: (@Sendable () -> Void)? = nil
     ) {
-        stateSubject.send(.active(route))
+
+        sendState(.active(route))
 
         self.present(route: route) { @MainActor [weak self] in
             dismissCompletion?()
-            self?.stateSubject.send(.dismissed(route))
+            self?.sendState(.dismissed(route))
         }
     }
 
@@ -71,12 +88,12 @@ extension Router {
         dismissCompletion: (@Sendable () -> Void)? = nil
     ) async -> RouteState<Route> {
 
-        stateSubject.send(.active(route))
+        sendState(.active(route))
 
         return await withCheckedContinuation { [weak self] continuation in
             self?.present(route: route) { @MainActor [weak self] in
                 dismissCompletion?()
-                self?.stateSubject.send(.dismissed(route))
+                self?.sendState(.dismissed(route))
                 continuation.resume(returning: RouteState.dismissed(route))
             }
         }
@@ -165,17 +182,18 @@ extension Router {
 
 extension Router {
 
-    /// Opens a cross-module portal **fire-and-forget**.
+    /// Opens a portal route immediately.
     ///
-    /// The mapper can refuse the portal (returns `nil`) – in that case
-    /// nothing happens.
+    /// - Parameters:
+    ///   - portalRoute: The external portal route.
+    ///   - dismissCompletion: Called after the portal is dismissed.
     public func portal(
         for portalRoute: some PortalRoutable,
         dismissCompletion: (@Sendable () -> Void)? = nil
     ) {
         /// Triggers pre-routing side-effects defined by the host app (analytics,logging, business hooks, …).
         /// *Không* thực hiện điều hướng; chỉ thông báo mapper.
-        portalMapper?.portalRoute(for: portalRoute)
+        portalMapper?.willMapPortalRoute(portalRoute)
 
         /// Converts the cross-module `PortalRoutable` value into an in-module
         /// concrete `Route`.
@@ -190,14 +208,19 @@ extension Router {
         )
     }
 
-    /// Opens a portal and suspends until the resulting screen disappears.
-    /// - Returns: `nil` when the portal cannot be mapped.
+    /// Opens a portal route and waits until it is dismissed.
+    ///
+    /// - Parameters:
+    ///   - portalRoute: The external portal route.
+    ///   - dismissCompletion: Called after the portal is dismissed.
+    /// - Returns: The final route state, or `nil` if mapping failed.
     @discardableResult
     public func portal(
         for portalRoute: some PortalRoutable,
         dismissCompletion: (@Sendable () -> Void)? = nil
     ) async -> RouteState<Route>? {
-        portalMapper?.portalRoute(for: portalRoute)
+        /// Triggers pre-routing side-effects defined by the host app (analytics,logging, business hooks, …).
+        portalMapper?.willMapPortalRoute(portalRoute)
 
         guard let mapped = portalMapper?
             .mapRoute(from: portalRoute) as? Route else {
@@ -207,7 +230,7 @@ extension Router {
         /// Launch navigation asynchronously.
         return await route(
             to: mapped,
-            dismissCompletion:         dismissCompletion ?? {}
+            dismissCompletion: dismissCompletion ?? {}
         )
     }
 }
@@ -215,6 +238,16 @@ extension Router {
 // MARK: Private – Navigation Core
 
 extension Router {
+    /// Broadcasts a route state to all subscribers.
+    ///
+    /// - Parameter state: The state to send.
+    private func sendState(_ state: RouteState<Route>) {
+        for cont in continuations.values {
+            /// Resume the task awaiting the next iteration point by having it return normally from its suspension point with a given element.
+            cont.yield(state)
+        }
+    }
+
     /// Stores *handler* so it can be executed later on `dismiss`.
     func registerDismissHandler(
         for route: Route,

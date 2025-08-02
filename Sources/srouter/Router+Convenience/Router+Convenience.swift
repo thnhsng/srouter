@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import Combine
 
 // MARK: - Public navigation helpers
 public extension Router {
@@ -122,7 +121,7 @@ private extension Router {
         dismissCompletion: (@Sendable () -> Void)?
     ) {
         // Pre-routing side-effects (analytics, logging, …).
-        portalMapper?.portalRoute(for: portal)
+        portalMapper?.willMapPortalRoute(portal)
 
         guard let mapped = portalMapper?.mapRoute(from: portal) as? Route else { return }
 

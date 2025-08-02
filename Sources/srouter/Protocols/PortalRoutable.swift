@@ -14,8 +14,12 @@ import SwiftUI
 public protocol PortalRoutable: Hashable { }
 
 public extension PortalRoutable {
+    /// A stable string identifier for this route.
     var id: String { String(reflecting: Self.self) }
 
+    /// Hashes the route by its identifier.
+    ///
+    /// - Parameter hasher: The hasher to combine into.
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
@@ -25,14 +29,19 @@ public extension PortalRoutable {
     }
 }
 
-/// A protocol that defines the mapping logic for portal routes.
-/// Conform to this protocol in the main app to handle routing across modules.
+/// A type that can map external portal routes into local app routes.
 public protocol PortalRouteMappable: AnyObject {
     associatedtype Route: Routable
 
-    /// Maps a `PortalRoute` to a specific `Routable` instance.
-    /// - Parameter portalRoute: The portal route to map.
-    /// - Returns: The corresponding route, if mapping is successful; otherwise, nil.
-    func mapRoute(from portalRoute: some PortalRoutable) -> Route?
-    func portalRoute(for portalRoute: some PortalRoutable)
+    /// Returns a local route for a given portal route.
+    ///
+    /// - Parameter portalRoute: An external route value.
+    /// - Returns: A matching app route, or `nil` if none.
+    func mapRoute(from portalRoute: any PortalRoutable) -> Route?
+
+    /// Called before mapping for side-effects (analytics, logging, hooks).
+    ///
+    /// Does not perform navigation.
+    /// - Parameter portalRoute: The portal route about to be handled.
+    func willMapPortalRoute(_ portalRoute: any PortalRoutable)
 }

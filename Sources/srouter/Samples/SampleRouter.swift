@@ -25,7 +25,7 @@ enum DemoRoute: Routable {
     }
 
     // Build destination view and inject the router.
-    @MainActor @ViewBuilder
+    @ViewBuilder
     func view(attach router: any RouterHandling) -> some View {
         switch self {
         case .home:
@@ -59,16 +59,17 @@ enum DemoPortal: PortalRoutable {
 }
 
 final class DemoPortalMapper: PortalRouteMappable {
+
     typealias AppRoute = DemoRoute
 
-    func mapRoute(from portalRoute: some PortalRoutable) -> DemoRoute? {
+    func mapRoute(from portalRoute: any PortalRoutable) -> DemoRoute? {
         switch portalRoute as? DemoPortal {
         case .settings?: .settings
         default: nil
         }
     }
 
-    func portalRoute(for portalRoute: some PortalRoutable) {
+    func willMapPortalRoute(_ portalRoute: any PortalRoutable) {
         debugPrint("[Analytics] open portal:", portalRoute.id)
     }
 }
