@@ -28,7 +28,7 @@ public enum PresentationStyle: Sendable {
 /// * Each case must build its **destination view** in `view(attach:)`.
 /// * `Destination` defaults to `AnyView`, so conformers normally need no
 ///   extra `typealias`.
-public protocol Routable: Identifiable, Hashable, Sendable {
+public protocol Routable: Identifiable, Sendable, Hashable {
 
     /// Concrete view type for this route (defaults to `AnyView`).
     associatedtype Destination: View
@@ -38,11 +38,12 @@ public protocol Routable: Identifiable, Hashable, Sendable {
 
     /// Creates the screen, injecting the supplied **router** for
     /// further navigation inside the view hierarchy.
-    @MainActor @ViewBuilder
+    @ViewBuilder
     func view(attach router: any RouterHandling) -> Destination
 }
 
 // MARK: - Default behaviour
+
 public extension Routable {
     /// Default style: push onto the navigation stack.
     var presentationStyle: PresentationStyle { .navigationLink }

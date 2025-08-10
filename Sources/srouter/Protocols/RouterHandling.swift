@@ -10,6 +10,7 @@ import SwiftUI
 
 /// Defines the interface for a router.
 /// All methods run on the main actor.
+@MainActor
 public protocol RouterHandling: ObservableObject {
 
     // MARK: - Associated Types
@@ -103,4 +104,10 @@ public protocol RouterHandling: ObservableObject {
         for portalRoute: some PortalRoutable,
         dismissCompletion: (@Sendable () -> Void)?
     ) async -> RouteState<Route>?
+
+    /// Replace the whole navigation stack with a single route.
+    func replace(with route: Route, animation: Animation?)
+
+    /// Replace the whole stack with given routes.
+    func setStack(to routes: [Route], animation: Animation?)
 }

@@ -9,7 +9,7 @@
 import SwiftUI
 
 @MainActor
-public final class Router<Route: Routable>: @MainActor RouterHandling, ObservableObject {
+public final class Router<Route: Routable>: RouterHandling {
 
     typealias DismissHandler = @MainActor @Sendable () -> Void
 
@@ -233,6 +233,29 @@ extension Router {
             dismissCompletion: dismissCompletion ?? {}
         )
     }
+
+    /// Replace the whole navigation stack with a single route.
+    public func replace(with route: Route, animation: Animation? = .easeInOut(duration: 0.45)) {
+        setStack(to: [route], animation: animation)
+    }
+
+    /// Replace the whole stack with given routes.
+    public func setStack(to routes: [Route], animation: Animation? = .easeInOut(duration: 0.45)) {
+        // Build a fresh NavigationPath in memory (cheap), then swap once.
+        var newPath = NavigationPath()
+        for route in routes { newPath.append(route) }
+
+        // Clear modal if you want replace to be “clean”
+        dismissToRoot()
+
+        if let animation {
+            withAnimation(animation) {
+                self.navigationPath = newPath
+            }
+        } else {
+            self.navigationPath = newPath
+        }
+    }
 }
 
 // MARK: Private – Navigation Core
@@ -277,7 +300,7 @@ extension Router {
     }
 
     /// Executes and removes the stored dismiss handler for *route*.
-    private func fireDismissHandler(for route: Route) {
+    func fireDismissHandler(for route: Route) {
         dismissHandlers.removeValue(forKey: key(for: route))?()
     }
 
@@ -306,6 +329,7 @@ extension Router {
 
     /// Stable string key used for the dismiss-handler dictionary.
     private func key(for route: Route) -> String {
-        String(reflecting: route)
+        // String(reflecting: route)
+        route.id
     }
 }

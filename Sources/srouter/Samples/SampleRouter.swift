@@ -8,7 +8,7 @@
 import SwiftUI
 
 // MARK: - 1. Routes ----------------------------------------------------------
-enum DemoRoute: Routable {
+enum DemoRoute: @preconcurrency Routable {
 
     case home
     case detail(id: UUID)
@@ -25,7 +25,7 @@ enum DemoRoute: Routable {
     }
 
     // Build destination view and inject the router.
-    @ViewBuilder
+    @MainActor @ViewBuilder
     func view(attach router: any RouterHandling) -> some View {
         switch self {
         case .home:
@@ -34,7 +34,6 @@ enum DemoRoute: Routable {
                 .toAnyView()
 
         case .detail(let id):
-
             DetailScreen(id: id)
                 .environmentObject(router)
                 .toAnyView()

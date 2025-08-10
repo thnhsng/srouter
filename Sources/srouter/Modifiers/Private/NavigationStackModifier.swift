@@ -60,12 +60,9 @@ struct NavigationStackModifier<Handler: RouterHandling>: ViewModifier {
     private func buildView(with route: Handler.Route) -> some View {
         router
             .view(for: route)
-            .applyIfPresent(route as? (any ZoomTransition)) { zoom, view in
-                view.zoomTransition(
-                    route: zoom,
-                    namespace: namespace
-                )
-                .toAnyView()
+            .applyIfPresent(route as? (any ViewPresentation)) { present, view in
+                view.applyViewPresentation(route: present)
+                    .toAnyView()
             }
             .applyIfPresent(route as? (any ZoomTransition)) { zoom, view in
                 view.zoomTransition(
@@ -84,7 +81,12 @@ struct NavigationStackModifier<Handler: RouterHandling>: ViewModifier {
                       presentedRoute.presentationStyle == .sheet else { return nil }
                 return presentedRoute
             },
-            set: { router.presentedView = $0 }
+            set: { newVal in
+                if newVal == nil, let old = router.presentedView {
+                    (router as? Router<Handler.Route>)?.fireDismissHandler(for: old)
+                }
+                router.presentedView = newVal
+            }
         )
     }
 

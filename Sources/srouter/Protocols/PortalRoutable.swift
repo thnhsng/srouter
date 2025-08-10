@@ -30,7 +30,9 @@ public extension PortalRoutable {
 }
 
 /// A type that can map external portal routes into local app routes.
+
 public protocol PortalRouteMappable: AnyObject {
+
     associatedtype Route: Routable
 
     /// Returns a local route for a given portal route.
