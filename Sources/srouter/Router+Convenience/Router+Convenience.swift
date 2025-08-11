@@ -41,7 +41,7 @@ public extension Router {
 
     /// Pushes *route* and suspends until it disappears.
     @discardableResult
-    func push(
+    func pushAndWait(
         to route: Route,
         popCompletion: (@Sendable () -> Void)? = nil
     ) async -> RouteState<Route> {
@@ -50,7 +50,7 @@ public extension Router {
 
     /// Presents *route* as a sheet and waits for dismissal.
     @discardableResult
-    func sheet(
+    func sheetAndWait(
         to route: Route,
         dismissCompletion: (@Sendable () -> Void)? = nil
     ) async -> RouteState<Route> {
@@ -59,7 +59,7 @@ public extension Router {
 
     /// Presents *route* full-screen (iOS) and waits for dismissal.
     @discardableResult
-    func fullScreen(
+    func fullScreenAndWait(
         to route: Route,
         dismissCompletion: (@Sendable () -> Void)? = nil
     ) async -> RouteState<Route> {
@@ -108,9 +108,9 @@ private extension Router {
         case .navigationLink:
             return await self.routeAndWaitDismiss(to: route, dismissCompletion: dismissCompletion)
         case .sheet:
-            return await self.sheet(to: route, dismissCompletion: dismissCompletion)
+            return await self.sheetAndWait(to: route, dismissCompletion: dismissCompletion)
         case .fullScreen:
-            return await self.fullScreen(to: route, dismissCompletion: dismissCompletion)
+            return await self.fullScreenAndWait(to: route, dismissCompletion: dismissCompletion)
         }
     }
 
