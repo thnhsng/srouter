@@ -11,7 +11,7 @@ import SwiftUI
 
 /// A protocol that all cross-module routes should conform to.
 /// This protocol will be used to identify and map routes across different modules.
-public protocol PortalRoutable { }
+public protocol PortalRoutable: Sendable, Hashable { }
 
 public extension PortalRoutable {
     /// A stable string identifier for this route.
