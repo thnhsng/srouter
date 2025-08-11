@@ -59,7 +59,7 @@ public protocol RouterHandling: ObservableObject {
     ///   - dismissCompletion: Called after the route is dismissed.
     /// - Returns: The final route state.
     @discardableResult
-    func route(
+    func routeAndWaitDismiss(
         to route: Route,
         dismissCompletion: (@Sendable () -> Void)?
     ) async -> RouteState<Route>
@@ -68,13 +68,13 @@ public protocol RouterHandling: ObservableObject {
     func dismiss()
 
     /// Dismisses all modal presentations back to root.
-    func dismissToRoot()
+    func dismissAllModals()
 
     /// Pops the top view from the navigation stack.
-    func pop()
+    func pop(animation: Animation?)
 
     /// Pops all views back to the root of the stack.
-    func popToRoot()
+    func popToRoot(animation: Animation?)
 
     /// The number of nested routers, including this one.
     ///
@@ -106,7 +106,7 @@ public protocol RouterHandling: ObservableObject {
     ) async -> RouteState<Route>?
 
     /// Replace the whole navigation stack with a single route.
-    func replace(with route: Route, animation: Animation?)
+    func replace(with route: Route, animation: Animation?) async
 
     /// Replace the whole stack with given routes.
     func setStack(to routes: [Route], animation: Animation?)

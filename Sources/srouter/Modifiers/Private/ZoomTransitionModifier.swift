@@ -11,23 +11,26 @@ import SwiftUI
 @available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, visionOS 2.0, *)
 struct ZoomTransitionModifier<Transition: ZoomTransition>: ViewModifier {
 
-    // MARK: Stored properties
-    private let transition: Transition
-    private let namespace: Namespace.ID
+    @Environment(\.routerNamespace) private var envNs
 
-    // MARK: Init
-    init(transition: Transition, namespace: Namespace.ID) {
+    private let transition: Transition
+    private let explicitNs: Namespace.ID?
+    private var nsToUse: Namespace.ID? { explicitNs ?? envNs }
+
+    init(
+        transition: Transition,
+        namespace: Namespace.ID? = nil
+    ) {
         self.transition = transition
-        self.namespace = namespace
+        self.explicitNs = namespace
     }
 
-    // MARK: ViewModifier
     func body(content: Content) -> some View {
 #if canImport(UIKit)
-        content.navigationTransition(
-            .zoom(sourceID: transition.sourceID, in: namespace)
-        )
+        // iOS/iPadOS 18+: zoom navigation transition + matchedTransitionSource
+        content.navigationTransition(.zoom(sourceID: transition.sourceID, in: nsToUse))
 #elseif canImport(AppKit)
+        // macOS 15: fallback
         content.transition(.scale.combined(with: .opacity))
 #else
         content
@@ -35,45 +38,63 @@ struct ZoomTransitionModifier<Transition: ZoomTransition>: ViewModifier {
     }
 }
 
-extension View {
-
-    /// Applies a zoom transition if platform + OS support it.
+public extension View {
+    /// Apply zoom at the DESTINATION view
     @ViewBuilder
     func zoomTransition<R: ZoomTransition>(
         route: R,
-        namespace: Namespace.ID?
+        namespace: Namespace.ID? = nil
     ) -> some View {
-        if #available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, visionOS 2.0, *),
-           let ns = namespace, route.sourceID != nil {
-            modifier(
-                ZoomTransitionModifier(
-                    transition: route,
-                    namespace: ns
-                )
-            )
-        } else {
-            self
-        }
-    }
-
-    /// Registers `self` as a matched-geometry source.
-    @ViewBuilder
-    func asMatchedSource<T: ZoomTransition>(
-        transition: T,
-        namespace: Namespace.ID?
-    ) -> some View {
-        if #available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, visionOS 2.0, *),
-           let ns = namespace, transition.sourceID != nil {
-#if canImport(AppKit)
-            self.matchedGeometryEffect(id: transition.sourceID, in: ns)
-#else
-            self.matchedTransitionSource(id: transition.sourceID, in: ns) {
-                $0.background(.clear)
-            }
-#endif
+        if #available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, visionOS 2.0, *), route.sourceID != nil {
+            modifier(ZoomTransitionModifier(transition: route, namespace: namespace))
         } else {
             self
         }
     }
 }
 
+private struct ZoomSourceModifier<T: ZoomTransition>: ViewModifier {
+    @Environment(\.routerNamespace) private var envNs
+
+    private let transition: T
+    private let explicitNs: Namespace.ID?
+    private var nsToUse: Namespace.ID? { explicitNs ?? envNs }
+
+    init(transition: T, namespace: Namespace.ID? = nil) {
+        self.transition = transition
+        self.explicitNs = namespace
+    }
+
+    func body(content: Content) -> some View {
+        guard let ns = nsToUse, let id = transition.sourceID else {
+            return AnyView(content)
+        }
+
+#if os(iOS) || os(tvOS) || os(visionOS)
+        if #available(iOS 18.0, tvOS 18.0, visionOS 2.0, *) {
+            return AnyView(
+                content.matchedTransitionSource(id: id, in: ns) { cfg in
+                    cfg.background(.clear)
+                }
+            )
+        } else {
+            return AnyView(content)
+        }
+#elseif os(macOS)
+        // macOS fallback
+        return AnyView(content.matchedGeometryEffect(id: id, in: ns))
+#else
+        return AnyView(content)
+#endif
+    }
+}
+
+public extension View {
+    /// Source side for zoom transition (robust: no result-builder early returns)
+    func asMatchedSource<T: ZoomTransition>(
+        transition: T,
+        namespace: Namespace.ID? = nil
+    ) -> some View {
+        modifier(ZoomSourceModifier(transition: transition, namespace: namespace))
+    }
+}

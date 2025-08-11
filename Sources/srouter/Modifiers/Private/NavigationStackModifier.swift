@@ -15,15 +15,15 @@ import SwiftUI
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
 struct NavigationStackModifier<Handler: RouterHandling>: ViewModifier {
 
-    // MARK: Environment
+    // MARK: - Environment
     @EnvironmentObject private var router: Handler
+    @Environment(\.routerNamespace) private var envNs
 
-    // MARK: Stored
-    private let namespace: Namespace.ID?
+    private let explicitNs: Namespace.ID?
+    private var nsToUse: Namespace.ID? { explicitNs ?? envNs }
 
-    // MARK: Init
     init(namespace: Namespace.ID? = nil) {
-        self.namespace = namespace
+        self.explicitNs = namespace
     }
 
     func body(content: Content) -> some View {
@@ -58,16 +58,42 @@ struct NavigationStackModifier<Handler: RouterHandling>: ViewModifier {
 
     @ViewBuilder
     private func buildView(with route: Handler.Route) -> some View {
+        /// We replace the system back button with our own that calls `router.pop()`.
+        /// Why:
+        /// 1) The default back button directly mutates NavigationStack's `path`,
+        ///    so it *bypasses* our router API. That means no `dismissHandler`,
+        ///    no analytics hooks, and no custom animation hooks.
+        /// 2) Going through `router.pop()` guarantees we fire on-dismiss callbacks
+        ///    exactly once and run a single, predictable animation for all features.
+        ///
+        /// Trade-offs:
+        /// - On iOS, hiding the system back button may affect the interactive
+        ///   swipe-back gesture in some layouts. If you must keep swipe-back,
+        ///   consider intercepting the `path` binding instead (see "Intercept path"
+        ///   variant in the srouter docs).
+
         router
             .view(for: route)
+#if os(macOS)
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button { (router as? Router<Handler.Route>)?.pop() } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                }
+            }
+#endif
+            /// Apply per-route sheet configuration if present.
             .applyIfPresent(route as? (any ViewPresentation)) { present, view in
                 view.applyViewPresentation(route: present)
                     .toAnyView()
             }
+            /// Apply zoom transition (matched source/destination) when available.
             .applyIfPresent(route as? (any ZoomTransition)) { zoom, view in
                 view.zoomTransition(
                     route: zoom,
-                    namespace: namespace
+                    namespace: nsToUse
                 )
                 .toAnyView()
             }

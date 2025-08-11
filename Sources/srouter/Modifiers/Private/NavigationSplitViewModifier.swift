@@ -30,11 +30,12 @@ struct NavigationSplitViewModifier<
     // MARK: - Stored
 
     @State private var columnVisibility: NavigationSplitViewVisibility
-    private let namespace: Namespace.ID?
+    @Environment(\.routerNamespace) private var envNs
+
     private let sidebar: Sidebar
     private let navContent: NavContent
-
-    // MARK: - Init
+    private let explicitNs: Namespace.ID?
+    private var nsToUse: Namespace.ID? { explicitNs ?? envNs }
 
     init(
         columnVisibility: NavigationSplitViewVisibility,
@@ -43,7 +44,7 @@ struct NavigationSplitViewModifier<
         @ViewBuilder content: @escaping () -> NavContent
     ) {
         _columnVisibility = State(initialValue: columnVisibility)
-        self.namespace = namespace
+        self.explicitNs = namespace
         self.sidebar = sidebar()
         self.navContent = content()
     }
@@ -64,7 +65,7 @@ struct NavigationSplitViewModifier<
 
     /// iPhone-style – embed only a NavigationStack.
     private func compactLayout(detail: Content) -> some View {
-        detail.applyNavigationStack(with: router, namespace: namespace)
+        detail.applyNavigationStack(with: router, namespace: nsToUse)
     }
 
     /// iPad / macOS – embed a three-column split view.

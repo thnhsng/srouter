@@ -80,10 +80,10 @@ extension Router {
         }
     }
 
-    /// Opens *route* and suspends until it is dismissed / popped.
-    /// - Returns: Final ``RouteState`` for the destination.
+    /// Open `route` and SUSPEND until it is dismissed/pop.
+    /// Use the synchronous `route(to:)` when you don't need to await dismissal.
     @discardableResult
-    public func route(
+    public func routeAndWaitDismiss(
         to route: Route,
         dismissCompletion: (@Sendable () -> Void)? = nil
     ) async -> RouteState<Route> {
@@ -99,12 +99,15 @@ extension Router {
         }
     }
 
-    /// Resolves the SwiftUI view for *route* and injects a child router.
+    /// Resolve SwiftUI View for `route` and inject a child router.
+    ///
+    /// We also hook `.onDisappear` to fire the stored dismiss handler exactly once.
+    /// This is the reliable place to notify observers that a pushed screen disappeared.
     public func view(for route: Route) -> some View {
         route
             .view(attach: childRouter(for: route))
-            .onDisappear { [weak self] in
-                self?.fireDismissHandler(for: route)
+            .onDisappear {
+                self.fireDismissHandler(for: route)
             }
     }
 
@@ -112,8 +115,8 @@ extension Router {
     public func dismiss() {
         // If this router itself presented a modal → clear it
         if let modal = presentedView {
-            fireDismissHandler(for: modal)
-            presentedView = nil
+            self.fireDismissHandler(for: modal)
+            self.presentedView = nil
             return
         }
 
@@ -127,9 +130,14 @@ extension Router {
         dismissPresentingView()
     }
 
-    /// Dismisses every modal in the presenting chain.
-    public func dismissToRoot() {
-        presentingRouter?.dismiss()
+    /// Close every modal in the presenting chain (self → presenter → ...).
+    /// This does not touch the push stack (`navigationPath`).
+    public func dismissAllModals() {
+        var currentRouter: Router? = self
+        while let router = currentRouter {
+            router.presentedView = nil
+            currentRouter = router.presentingRouter
+        }
     }
 
     /// Pops the **top-most** screen from the navigation stack.
@@ -137,14 +145,17 @@ extension Router {
     /// If the stack is already empty nothing happens.
     /// The dismiss-handler is fired **once** for the popped screen so
     /// callers receive a predictable callback at the moment of removal.
-    public func pop() {
+    public func pop(animation: Animation? = .smooth(duration: 0.28)) {
         guard !navigationPath.isEmpty else {
             debugPrint(#function + "No items to pop.")
             return
         }
 
         let lastRoute = $navigationPath.last() as? Route
-        navigationPath.removeLast()
+
+        perform(animation) {
+            self.navigationPath.removeLast()
+        }
 
         if let lastRoute { fireDismissHandler(for: lastRoute) }
     }
@@ -154,20 +165,61 @@ extension Router {
     /// Only the dismiss-handler of the **top-most** route is invoked.
     /// This avoids calling a completion for every intermediate screen
     /// while still delivering a single “flow finished” callback.
-    public func popToRoot() {
+    public func popToRoot(animation: Animation? = .smooth(duration: 0.28)) {
         guard !navigationPath.isEmpty else {
             debugPrint(#function + "No items to pop.")
             return
         }
 
         let lastRoute = $navigationPath.last() as? Route
-        navigationPath.removeLast(navigationPath.count)
+
+        perform(animation) {
+            self.navigationPath.removeLast(self.navigationPath.count)
+        }
 
         if let lastRoute {
             fireDismissHandler(for: lastRoute)
         } else {
             debugPrint(#function + " – already at root.")
         }
+    }
+
+    /// Replace the whole stack with a single route in two phases:
+    public func replace(
+        with route: Route,
+        animation: Animation? = .smooth(duration: 0.30)
+    ) async {
+        // Clear modal if you want replace to be “clean”
+        if presentedView != nil || presentingRouter != nil { dismissAllModals() }
+
+#if os(iOS) || os(tvOS) || os(watchOS)
+        self.route(to: route)
+        await nextRunLoop()
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        self.setStack(to: [route], animation: nil)
+#else
+        if !navigationPath.isEmpty { popToRoot(animation: animation) }
+        await nextRunLoop()
+        self.route(to: route)
+#endif
+    }
+
+    /// Atomically swap the NavigationPath. This is a low-level API:
+    /// - No runloop waits are performed.
+    /// - No onDismiss handlers are fired (only the top-most when you pop manually).
+    /// Prefer `replace(with:)` for user-facing transitions.
+    public func setStack(
+        to routes: [Route],
+        animation: Animation? = .smooth(duration: 0.3)
+    ) {
+        // Build a fresh NavigationPath in memory (cheap), then swap once.
+        var newPath = NavigationPath()
+        for route in routes { newPath.append(route) }
+
+        // Clear modal if you want replace to be “clean”
+        if presentedView != nil || presentingRouter != nil { dismissAllModals() }
+
+        perform(animation) { navigationPath = newPath }
     }
 
     /// Depth of nested routers including **self**.
@@ -228,33 +280,10 @@ extension Router {
         }
 
         /// Launch navigation asynchronously.
-        return await route(
+        return await routeAndWaitDismiss(
             to: mapped,
             dismissCompletion: dismissCompletion ?? {}
         )
-    }
-
-    /// Replace the whole navigation stack with a single route.
-    public func replace(with route: Route, animation: Animation? = .easeInOut(duration: 0.45)) {
-        setStack(to: [route], animation: animation)
-    }
-
-    /// Replace the whole stack with given routes.
-    public func setStack(to routes: [Route], animation: Animation? = .easeInOut(duration: 0.45)) {
-        // Build a fresh NavigationPath in memory (cheap), then swap once.
-        var newPath = NavigationPath()
-        for route in routes { newPath.append(route) }
-
-        // Clear modal if you want replace to be “clean”
-        dismissToRoot()
-
-        if let animation {
-            withAnimation(animation) {
-                self.navigationPath = newPath
-            }
-        } else {
-            self.navigationPath = newPath
-        }
     }
 }
 
@@ -292,23 +321,23 @@ extension Router {
 
         switch route.presentationStyle {
         case .navigationLink:
-            withAnimation { navigationPath.append(route) }
+            withAnimation { self.navigationPath.append(route) }
 
         case .sheet, .fullScreen:
-            presentedView = route
+            withAnimation { presentedView = route }
         }
     }
 
     /// Executes and removes the stored dismiss handler for *route*.
     func fireDismissHandler(for route: Route) {
-        dismissHandlers.removeValue(forKey: key(for: route))?()
+        self.dismissHandlers.removeValue(forKey: self.key(for: route))?()
     }
 
     /// Clears modal state on **self** and the presenting router.
     private func dismissPresentingView() {
-        presentingRouter?.presentedView = nil
-        presentingRouter = nil
-        presentedView = nil
+        self.presentingRouter?.presentedView = nil
+        self.presentingRouter = nil
+        self.presentedView = nil
     }
 
     /// Returns the router instance that should drive child navigation.
@@ -332,4 +361,24 @@ extension Router {
         // String(reflecting: route)
         route.id
     }
+
+    @MainActor
+    @inline(__always)
+    private func perform(_ animation: Animation?, _ updates: () -> Void) {
+        if let animation {
+            withAnimation(animation, updates)
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction, updates)
+        }
+    }
+
+    @MainActor
+    private func nextRunLoop() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
 }
+

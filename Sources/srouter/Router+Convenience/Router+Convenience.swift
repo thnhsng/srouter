@@ -106,7 +106,7 @@ private extension Router {
     ) async -> RouteState<Route> {
         switch style {
         case .navigationLink:
-            return await self.route(to: route, dismissCompletion: dismissCompletion)
+            return await self.routeAndWaitDismiss(to: route, dismissCompletion: dismissCompletion)
         case .sheet:
             return await self.sheet(to: route, dismissCompletion: dismissCompletion)
         case .fullScreen:
