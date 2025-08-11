@@ -10,8 +10,7 @@ import SwiftUI
 
 @MainActor
 public final class Router<Route: Routable>: RouterHandling {
-
-    typealias DismissHandler = @MainActor @Sendable () -> Void
+    typealias PopOrDismissHandler = @MainActor @Sendable () -> Void
 
     // MARK: - State 
 
@@ -42,9 +41,9 @@ public final class Router<Route: Routable>: RouterHandling {
     // MARK: - Private – Stored Properties
 
     /// Mapper for cross-module portal routes.
-    internal var portalMapper: (any PortalRouteMappable)?
+    internal weak var portalMapper: (any PortalRouteMappable)?
     /// Handlers to run when a route is dismissed.
-    private var dismissHandlers: [String: DismissHandler] = [:]
+    private var dismissHandlers: [String: PopOrDismissHandler] = [:]
     /// Active continuations for broadcasting route events.
     private var continuations: [UUID: AsyncStream<RouteState<Route>>.Continuation] = [:]
 
@@ -56,6 +55,16 @@ public final class Router<Route: Routable>: RouterHandling {
     ) {
         self.presentingRouter = presentingRouter
         self.portalMapper = portalMapper
+    }
+
+    deinit {
+#if DEBUG
+        let count = continuations.count
+        if count > 0 {
+            let msg = "Router continuations still active (\(count))"
+            assertionFailure(msg)
+        }
+#endif
     }
 }
 
@@ -69,13 +78,13 @@ extension Router {
     ///   - completion: Executed when the screen disappears.
     public func route(
         to route: Route,
-        dismissCompletion: (@Sendable () -> Void)? = nil
+        onPopOrDismiss: (@Sendable () -> Void)? = nil
     ) {
 
         sendState(.active(route))
 
         self.present(route: route) { @MainActor [weak self] in
-            dismissCompletion?()
+            onPopOrDismiss?()
             self?.sendState(.dismissed(route))
         }
     }
@@ -83,16 +92,12 @@ extension Router {
     /// Open `route` and SUSPEND until it is dismissed/pop.
     /// Use the synchronous `route(to:)` when you don't need to await dismissal.
     @discardableResult
-    public func routeAndWaitDismiss(
-        to route: Route,
-        dismissCompletion: (@Sendable () -> Void)? = nil
-    ) async -> RouteState<Route> {
+    public func routeAndWait(to route: Route) async -> RouteState<Route> {
 
         sendState(.active(route))
 
         return await withCheckedContinuation { [weak self] continuation in
             self?.present(route: route) { @MainActor [weak self] in
-                dismissCompletion?()
                 self?.sendState(.dismissed(route))
                 continuation.resume(returning: RouteState.dismissed(route))
             }
@@ -103,10 +108,21 @@ extension Router {
     ///
     /// We also hook `.onDisappear` to fire the stored dismiss handler exactly once.
     /// This is the reliable place to notify observers that a pushed screen disappeared.
+    @ViewBuilder
     public func view(for route: Route) -> some View {
-        route
-            .view(attach: childRouter(for: route))
+        let child = childRouter(for: route)
+
+        #if DEBUG
+        RouterHooks.onCreateModalChild?(child)
+        #endif
+
+        return route
+            .view(attach: child)
             .onDisappear {
+                #if DEBUG
+                RouterHooks.onRouteViewDisappear?(route)
+                #endif
+
                 self.fireDismissHandler(for: route)
             }
     }
@@ -228,6 +244,17 @@ extension Router {
             $0?.presentingRouter
         }.reduce(0) { count, _ in count + 1 }
     }
+
+    public func registerDismissHandler<Owner: AnyObject>(
+        for route: Route,
+        owner: Owner,
+        _ block: @MainActor @Sendable @escaping (Owner) -> Void
+    ) {
+        registerDismissHandler(for: route) { [weak owner] in
+            guard let owner else { return }
+            block(owner)
+        }
+    }
 }
 
 // MARK: - Portal API
@@ -238,10 +265,10 @@ extension Router {
     ///
     /// - Parameters:
     ///   - portalRoute: The external portal route.
-    ///   - dismissCompletion: Called after the portal is dismissed.
+    ///   - onPopOrDismiss: Called after the portal is dismissed/ Pop.
     public func portal(
         for portalRoute: some PortalRoutable,
-        dismissCompletion: (@Sendable () -> Void)? = nil
+        onPopOrDismiss: (@Sendable () -> Void)? = nil
     ) {
         /// Triggers pre-routing side-effects defined by the host app (analytics,logging, business hooks, …).
         /// *Không* thực hiện điều hướng; chỉ thông báo mapper.
@@ -256,7 +283,7 @@ extension Router {
         /// Launch navigation.
         self.route(
             to: mapped,
-            dismissCompletion: dismissCompletion ?? {}
+            onPopOrDismiss: onPopOrDismiss ?? {}
         )
     }
 
@@ -264,13 +291,9 @@ extension Router {
     ///
     /// - Parameters:
     ///   - portalRoute: The external portal route.
-    ///   - dismissCompletion: Called after the portal is dismissed.
     /// - Returns: The final route state, or `nil` if mapping failed.
     @discardableResult
-    public func portal(
-        for portalRoute: some PortalRoutable,
-        dismissCompletion: (@Sendable () -> Void)? = nil
-    ) async -> RouteState<Route>? {
+    public func portalAndWait(for portalRoute: some PortalRoutable) async -> RouteState<Route>? {
         /// Triggers pre-routing side-effects defined by the host app (analytics,logging, business hooks, …).
         portalMapper?.willMapPortalRoute(portalRoute)
 
@@ -280,10 +303,7 @@ extension Router {
         }
 
         /// Launch navigation asynchronously.
-        return await routeAndWaitDismiss(
-            to: mapped,
-            dismissCompletion: dismissCompletion ?? {}
-        )
+        return await routeAndWait(to: mapped)
     }
 }
 
@@ -324,7 +344,7 @@ extension Router {
             withAnimation { self.navigationPath.append(route) }
 
         case .sheet, .fullScreen:
-            withAnimation { presentedView = route }
+            presentedView = route
         }
     }
 

@@ -76,10 +76,14 @@ final class DemoPortalMapper: PortalRouteMappable {
 // MARK: - 3. Root host -------------------------------------------------------
 
 struct RootHost: View {
+    private let mapper: PortalRouteMappable
+    @StateObject private var router: Router<DemoRoute>
 
-    @StateObject private var router = Router<DemoRoute>(
-        portalMapper: DemoPortalMapper()
-    )
+    init() {
+        self.mapper = DemoPortalMapper()
+        let router = Router<DemoRoute>(portalMapper: mapper)
+        _router = StateObject(wrappedValue: router)
+    }
 
     var body: some View {
         HomeScreen()
@@ -130,9 +134,8 @@ private struct HomeScreen: View {
             // ----- PORTAL + await
             Button("Settings via portal & await") {
                 Task {
-                    await router.portal(for: DemoPortal.settings) {
-                        debugPrint("Settings dismissed ✅")
-                    }
+                    let state = await router.portalAndWait(for: DemoPortal.settings)
+                    debugPrint(state)
                 }
             }
         }

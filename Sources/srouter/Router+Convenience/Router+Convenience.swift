@@ -16,54 +16,45 @@ public extension Router {
     /// Pushes *route* onto the current `NavigationStack`.
     func push(
         to route: Route,
-        popCompletion: (@Sendable () -> Void)? = nil
+        onPop: (@Sendable () -> Void)? = nil
     ) {
-        present(route: route, using: .navigationLink, dismissCompletion: popCompletion)
+        present(route: route, using: .navigationLink, onPopOrDismiss: onPop)
     }
 
     /// Presents *route* as a sheet.
     func sheet(
         to route: Route,
-        dismissCompletion: (@Sendable () -> Void)? = nil
+        onDismiss: (@Sendable () -> Void)? = nil
     ) {
-        present(route: route, using: .sheet, dismissCompletion: dismissCompletion)
+        present(route: route, using: .sheet, onPopOrDismiss: onDismiss)
     }
 
     /// Presents *route* full-screen (iOS only).
     func fullScreen(
         to route: Route,
-        dismissCompletion: (@Sendable () -> Void)? = nil
+        onDismiss: (@Sendable () -> Void)? = nil
     ) {
-        present(route: route, using: .fullScreen, dismissCompletion: dismissCompletion)
+        present(route: route, using: .fullScreen, onPopOrDismiss: onDismiss)
     }
 
     // MARK: Awaiting variants
 
     /// Pushes *route* and suspends until it disappears.
     @discardableResult
-    func pushAndWait(
-        to route: Route,
-        popCompletion: (@Sendable () -> Void)? = nil
-    ) async -> RouteState<Route> {
-        await presentAwaiting(route: route, using: .navigationLink, dismissCompletion: popCompletion)
+    func pushAndWait(to route: Route) async -> RouteState<Route> {
+        await presentAwaiting(route: route, using: .navigationLink)
     }
 
     /// Presents *route* as a sheet and waits for dismissal.
     @discardableResult
-    func sheetAndWait(
-        to route: Route,
-        dismissCompletion: (@Sendable () -> Void)? = nil
-    ) async -> RouteState<Route> {
-        await presentAwaiting(route: route, using: .sheet, dismissCompletion: dismissCompletion)
+    func sheetAndWait(to route: Route) async -> RouteState<Route> {
+        await presentAwaiting(route: route, using: .sheet)
     }
 
     /// Presents *route* full-screen (iOS) and waits for dismissal.
     @discardableResult
-    func fullScreenAndWait(
-        to route: Route,
-        dismissCompletion: (@Sendable () -> Void)? = nil
-    ) async -> RouteState<Route> {
-        await presentAwaiting(route: route, using: .fullScreen, dismissCompletion: dismissCompletion)
+    func fullScreenAndWait(to route: Route) async -> RouteState<Route> {
+        await presentAwaiting(route: route, using: .fullScreen)
     }
 
     // MARK: Portal
@@ -72,9 +63,9 @@ public extension Router {
     func portal(
         _ portal: some PortalRoutable,
         style: PresentationStyle,
-        dismissCompletion: (@Sendable () -> Void)? = nil
+        onDismiss: (@Sendable () -> Void)? = nil
     ) {
-        portalInternal(portal, forcedStyle: style, dismissCompletion: dismissCompletion)
+        portalInternal(portal, forcedStyle: style, onPopOrDismiss: onDismiss)
     }
 }
 
@@ -85,10 +76,10 @@ private extension Router {
     func present(
         route: Route,
         using style: PresentationStyle,
-        dismissCompletion: (@Sendable () -> Void)?
+        onPopOrDismiss: (@Sendable () -> Void)?
     ) {
         // Register once for later execution.
-        registerDismissHandler(for: route) { dismissCompletion?() }
+        registerDismissHandler(for: route) { onPopOrDismiss?() }
 
         switch style {
         case .navigationLink:
@@ -101,16 +92,15 @@ private extension Router {
     /// Async variant that delegates to existing async APIs.
     func presentAwaiting(
         route: Route,
-        using style: PresentationStyle,
-        dismissCompletion: (@Sendable () -> Void)?
+        using style: PresentationStyle
     ) async -> RouteState<Route> {
         switch style {
         case .navigationLink:
-            return await self.routeAndWaitDismiss(to: route, dismissCompletion: dismissCompletion)
+            return await self.routeAndWait(to: route)
         case .sheet:
-            return await self.sheetAndWait(to: route, dismissCompletion: dismissCompletion)
+            return await self.sheetAndWait(to: route)
         case .fullScreen:
-            return await self.fullScreenAndWait(to: route, dismissCompletion: dismissCompletion)
+            return await self.fullScreenAndWait(to: route)
         }
     }
 
@@ -118,7 +108,7 @@ private extension Router {
     func portalInternal(
         _ portal: some PortalRoutable,
         forcedStyle: PresentationStyle,
-        dismissCompletion: (@Sendable () -> Void)?
+        onPopOrDismiss: (@Sendable () -> Void)?
     ) {
         // Pre-routing side-effects (analytics, logging, …).
         portalMapper?.willMapPortalRoute(portal)
@@ -127,11 +117,11 @@ private extension Router {
 
         switch forcedStyle {
         case .navigationLink:
-            push(to: mapped, popCompletion: dismissCompletion)
+            push(to: mapped, onPop: onPopOrDismiss)
         case .sheet:
-            sheet(to: mapped, dismissCompletion: dismissCompletion)
+            sheet(to: mapped, onDismiss: onPopOrDismiss)
         case .fullScreen:
-            fullScreen(to: mapped, dismissCompletion: dismissCompletion)
+            fullScreen(to: mapped, onDismiss: onPopOrDismiss)
         }
     }
 }

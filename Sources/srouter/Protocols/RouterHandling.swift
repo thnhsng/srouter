@@ -46,23 +46,19 @@ public protocol RouterHandling: ObservableObject {
     ///
     /// - Parameters:
     ///   - route: The route to open.
-    ///   - dismissCompletion: Called after the route is dismissed.
+    ///   - onPopOrDismiss: Called after the route is dismissed/Pop.
     func route(
         to route: Route,
-        dismissCompletion: (@Sendable () -> Void)?
+        onPopOrDismiss: (@Sendable () -> Void)?
     )
 
     /// Pushes or presents a route and waits until it dismisses.
     ///
     /// - Parameters:
     ///   - route: The route to open.
-    ///   - dismissCompletion: Called after the route is dismissed.
     /// - Returns: The final route state.
     @discardableResult
-    func routeAndWaitDismiss(
-        to route: Route,
-        dismissCompletion: (@Sendable () -> Void)?
-    ) async -> RouteState<Route>
+    func routeAndWait(to route: Route) async -> RouteState<Route>
 
     /// Dismisses the current modal presentation.
     func dismiss()
@@ -87,23 +83,19 @@ public protocol RouterHandling: ObservableObject {
     ///
     /// - Parameters:
     ///   - portalRoute: The portal route to open.
-    ///   - dismissCompletion: Called after the portal route is dismissed.
+    ///   - onPopOrDismiss: Called after the portal route is dismissed/Pop
     func portal(
         for portalRoute: some PortalRoutable,
-        dismissCompletion: (@Sendable () -> Void)?
+        onPopOrDismiss: (@Sendable () -> Void)?
     )
 
     /// Opens a cross-module portal and waits until it dismisses.
     ///
     /// - Parameters:
     ///   - portalRoute: The portal route to open.
-    ///   - dismissCompletion: Called after the portal route is dismissed.
     /// - Returns: The final route state, or nil if cancelled.
     @discardableResult
-    func portal(
-        for portalRoute: some PortalRoutable,
-        dismissCompletion: (@Sendable () -> Void)?
-    ) async -> RouteState<Route>?
+    func portalAndWait(for portalRoute: some PortalRoutable) async -> RouteState<Route>?
 
     /// Replace the whole navigation stack with a single route.
     func replace(with route: Route, animation: Animation?) async
