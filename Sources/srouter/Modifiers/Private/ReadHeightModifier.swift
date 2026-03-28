@@ -19,11 +19,11 @@ import SwiftUI
 /// need to be considered.
 ///
 /// - Default Value: The default value for this key is `0`, representing no height.
-struct HeightPreferenceKey: PreferenceKey {
+public struct HeightPreferenceKey: PreferenceKey {
 
     /// The default value for the preference key, which is `0`. This represents the initial height
     /// before any actual value is read from the view.
-    static let defaultValue: CGFloat = 0
+    public static let defaultValue: CGFloat = 0
 
     /// Combines multiple values by taking the maximum height encountered.
     /// This method is called for each new value, allowing you to aggregate values from multiple
@@ -32,7 +32,7 @@ struct HeightPreferenceKey: PreferenceKey {
     /// - Parameters:
     ///   - value: The current accumulated value of height.
     ///   - nextValue: A closure that returns the next value in the sequence.
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    public static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }
 }

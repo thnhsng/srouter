@@ -8,6 +8,18 @@
 
 import SwiftUI
 
+/// Controls whether the router injects its custom back button in the navigation toolbar (macOS only).
+private struct RouterShowsBackButtonKey: EnvironmentKey {
+    static let defaultValue: Bool = true
+}
+
+private extension EnvironmentValues {
+    var routerShowsBackButton: Bool {
+        get { self[RouterShowsBackButtonKey.self] }
+        set { self[RouterShowsBackButtonKey.self] = newValue }
+    }
+}
+
 /// Adds a `NavigationStack` driven by a `RouterHandling` object.
 ///
 /// Extra visual effects (`ZoomTransition`, `ViewPresentation`) are applied
@@ -18,6 +30,7 @@ struct NavigationStackModifier<Handler: RouterHandling>: ViewModifier {
     // MARK: - Environment
     @EnvironmentObject private var router: Handler
     @Environment(\.routerNamespace) private var envNs
+    @Environment(\.routerShowsBackButton) private var showBackButton
 
     private let explicitNs: Namespace.ID?
     private var nsToUse: Namespace.ID? { explicitNs ?? envNs }
@@ -77,9 +90,11 @@ struct NavigationStackModifier<Handler: RouterHandling>: ViewModifier {
 #if os(macOS)
             .navigationBarBackButtonHidden(true)
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button { (router as? Router<Handler.Route>)?.pop() } label: {
-                        Image(systemName: "chevron.left")
+                if showBackButton {
+                    ToolbarItem(placement: .navigation) {
+                        Button { (router as? Router<Handler.Route>)?.pop() } label: {
+                            Image(systemName: "chevron.left")
+                        }
                     }
                 }
             }
@@ -143,5 +158,11 @@ public extension View {
     ) -> some View {
         modifier(NavigationStackModifier<RouterType>(namespace: namespace))
             .environmentObject(router)
+    }
+
+    /// Controls whether srouter injects a custom back button in the navigation toolbar (macOS only).
+    /// - Parameter show: Pass `false` to hide the router-provided back button so you can provide your own.
+    func routerShowsBackButton(_ show: Bool) -> some View {
+        environment(\.routerShowsBackButton, show)
     }
 }
